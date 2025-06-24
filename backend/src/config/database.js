@@ -3,7 +3,11 @@ import { logger } from '../utils/logger.js'
 
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://tejaswinaradasi:AryvxE5IfqY5pXYB@cluster0.zg0xyki.mongodb.net/senseease'
+    const mongoURI = process.env.MONGODB_URI
+    
+    if (!mongoURI) {
+      throw new Error('MONGODB_URI is not defined in environment variables')
+    }
     
     const conn = await mongoose.connect(mongoURI, {
       // Remove deprecated options

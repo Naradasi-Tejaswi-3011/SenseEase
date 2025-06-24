@@ -17,19 +17,11 @@ const cartItemSchema = new mongoose.Schema({
     required: true,
     min: [0, 'Price cannot be negative']
   },
-  selectedVariants: [{
-    name: String,
-    value: String,
-    priceModifier: {
-      type: Number,
-      default: 0
-    }
-  }],
   addedAt: {
     type: Date,
     default: Date.now
   }
-}, { _id: true })
+})
 
 const cartSchema = new mongoose.Schema({
   user: {
@@ -39,232 +31,85 @@ const cartSchema = new mongoose.Schema({
     unique: true
   },
   items: [cartItemSchema],
-  
-  // Calculated fields
-  subtotal: {
+  totalItems: {
     type: Number,
-    default: 0,
-    min: [0, 'Subtotal cannot be negative']
+    default: 0
   },
-  tax: {
+  totalPrice: {
     type: Number,
-    default: 0,
-    min: [0, 'Tax cannot be negative']
+    default: 0
   },
-  shipping: {
-    type: Number,
-    default: 0,
-    min: [0, 'Shipping cannot be negative']
-  },
-  discount: {
-    type: Number,
-    default: 0,
-    min: [0, 'Discount cannot be negative']
-  },
-  total: {
-    type: Number,
-    default: 0,
-    min: [0, 'Total cannot be negative']
-  },
-  itemCount: {
-    type: Number,
-    default: 0,
-    min: [0, 'Item count cannot be negative']
-  },
-  
-  // Applied coupons/discounts
-  appliedCoupons: [{
-    code: String,
-    discountAmount: Number,
-    discountType: {
-      type: String,
-      enum: ['percentage', 'fixed']
-    }
-  }],
-  
-  // Shipping information
-  shippingAddress: {
-    street: String,
-    city: String,
-    state: String,
-    zipCode: String,
-    country: String
-  },
-  
-  // Cart status
-  status: {
-    type: String,
-    enum: ['active', 'abandoned', 'converted'],
-    default: 'active'
-  },
-  
-  // Timestamps for cart abandonment tracking
-  lastActivity: {
+  lastUpdated: {
     type: Date,
     default: Date.now
-  },
-  expiresAt: {
-    type: Date,
-    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
   }
 }, {
   timestamps: true
 })
 
-// Indexes
-cartSchema.index({ user: 1 })
-cartSchema.index({ status: 1 })
-cartSchema.index({ lastActivity: -1 })
-cartSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
-
-// Pre-save middleware to calculate totals
-cartSchema.pre('save', function(next) {
-  this.calculateTotals()
-  this.lastActivity = new Date()
-  next()
-})
-
-// Method to calculate cart totals
+// Method to calculate totals
 cartSchema.methods.calculateTotals = function() {
-  // Calculate subtotal and item count
-  this.subtotal = 0
-  this.itemCount = 0
-  
-  this.items.forEach(item => {
-    const itemPrice = item.price
-    const variantPrice = item.selectedVariants.reduce((sum, variant) => sum + variant.priceModifier, 0)
-    const totalItemPrice = (itemPrice + variantPrice) * item.quantity
-    
-    this.subtotal += totalItemPrice
-    this.itemCount += item.quantity
-  })
-  
-  // Calculate tax (8.5% default)
-  const taxRate = 0.085
-  this.tax = Math.round(this.subtotal * taxRate * 100) / 100
-  
-  // Calculate shipping (free shipping over $35)
-  this.shipping = this.subtotal >= 35 ? 0 : 5.99
-  
-  // Apply discounts
-  let totalDiscount = 0
-  this.appliedCoupons.forEach(coupon => {
-    if (coupon.discountType === 'percentage') {
-      totalDiscount += (this.subtotal * coupon.discountAmount / 100)
-    } else {
-      totalDiscount += coupon.discountAmount
-    }
-  })
-  this.discount = Math.round(totalDiscount * 100) / 100
-  
-  // Calculate final total
-  this.total = Math.round((this.subtotal + this.tax + this.shipping - this.discount) * 100) / 100
-  
-  // Ensure total is not negative
-  if (this.total < 0) {
-    this.total = 0
-  }
+  this.totalItems = this.items.reduce((total, item) => total + item.quantity, 0)
+  this.totalPrice = this.items.reduce((total, item) => total + (item.price * item.quantity), 0)
+  this.lastUpdated = new Date()
 }
 
 // Method to add item to cart
-cartSchema.methods.addItem = function(productId, quantity = 1, price, selectedVariants = []) {
-  const existingItemIndex = this.items.findIndex(item => 
-    item.product.toString() === productId.toString() &&
-    JSON.stringify(item.selectedVariants) === JSON.stringify(selectedVariants)
-  )
+cartSchema.methods.addItem = function(productId, quantity, price) {
+  const existingItem = this.items.find(item => item.product.toString() === productId.toString())
   
-  if (existingItemIndex > -1) {
-    // Update existing item quantity
-    this.items[existingItemIndex].quantity += quantity
+  if (existingItem) {
+    existingItem.quantity += quantity
+    existingItem.addedAt = new Date()
   } else {
-    // Add new item
     this.items.push({
       product: productId,
       quantity,
       price,
-      selectedVariants
+      addedAt: new Date()
     })
   }
   
-  return this.save()
+  this.calculateTotals()
 }
 
 // Method to update item quantity
-cartSchema.methods.updateItemQuantity = function(itemId, quantity) {
-  const item = this.items.id(itemId)
+cartSchema.methods.updateItemQuantity = function(productId, quantity) {
+  const item = this.items.find(item => item.product.toString() === productId.toString())
+  
   if (item) {
     if (quantity <= 0) {
-      this.items.pull(itemId)
+      this.items = this.items.filter(item => item.product.toString() !== productId.toString())
     } else {
       item.quantity = quantity
+      item.addedAt = new Date()
     }
+    this.calculateTotals()
+    return true
   }
-  return this.save()
+  return false
 }
 
 // Method to remove item from cart
-cartSchema.methods.removeItem = function(itemId) {
-  this.items.pull(itemId)
-  return this.save()
+cartSchema.methods.removeItem = function(productId) {
+  this.items = this.items.filter(item => item.product.toString() !== productId.toString())
+  this.calculateTotals()
 }
 
 // Method to clear cart
 cartSchema.methods.clearCart = function() {
   this.items = []
-  this.appliedCoupons = []
-  return this.save()
+  this.calculateTotals()
 }
 
-// Method to apply coupon
-cartSchema.methods.applyCoupon = function(couponCode, discountAmount, discountType) {
-  // Check if coupon already applied
-  const existingCoupon = this.appliedCoupons.find(coupon => coupon.code === couponCode)
-  if (existingCoupon) {
-    throw new Error('Coupon already applied')
-  }
-  
-  this.appliedCoupons.push({
-    code: couponCode,
-    discountAmount,
-    discountType
-  })
-  
-  return this.save()
-}
-
-// Method to remove coupon
-cartSchema.methods.removeCoupon = function(couponCode) {
-  this.appliedCoupons = this.appliedCoupons.filter(coupon => coupon.code !== couponCode)
-  return this.save()
-}
-
-// Static method to find or create cart for user
-cartSchema.statics.findOrCreateForUser = async function(userId) {
-  let cart = await this.findOne({ user: userId }).populate('items.product')
-  
-  if (!cart) {
-    cart = new this({ user: userId })
-    await cart.save()
-  }
-  
-  return cart
-}
-
-// Virtual for cart summary
-cartSchema.virtual('summary').get(function() {
-  return {
-    itemCount: this.itemCount,
-    subtotal: this.subtotal,
-    tax: this.tax,
-    shipping: this.shipping,
-    discount: this.discount,
-    total: this.total
-  }
+// Pre-save middleware to update totals
+cartSchema.pre('save', function(next) {
+  this.calculateTotals()
+  next()
 })
 
-// Ensure virtual fields are serialized
-cartSchema.set('toJSON', {
-  virtuals: true
-})
+// Index for performance
+cartSchema.index({ user: 1 })
+cartSchema.index({ 'items.product': 1 })
 
 export default mongoose.model('Cart', cartSchema)

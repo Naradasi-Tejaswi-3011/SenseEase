@@ -5,7 +5,6 @@ import morgan from 'morgan'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import mongoSanitize from 'express-mongo-sanitize'
-import xss from 'xss-clean'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import dotenv from 'dotenv'
@@ -21,8 +20,6 @@ import userRoutes from './routes/userRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import cartRoutes from './routes/cartRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
-import adminRoutes from './routes/adminRoutes.js'
-import analyticsRoutes from './routes/analyticsRoutes.js'
 
 // Load environment variables
 dotenv.config()
@@ -34,7 +31,7 @@ const server = createServer(app)
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: process.env.FRONTEND_URL || ["http://localhost:3000", "http://localhost:3001"],
     methods: ["GET", "POST"]
   }
 })
@@ -55,19 +52,19 @@ app.use(helmet({
   },
 }))
 
-// Rate limiting
+// Rate limiting - Lenient for development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // limit each IP to 1000 requests per windowMs
   message: {
     error: 'Too many requests from this IP, please try again later.'
   }
 })
 
-// Stricter rate limiting for auth routes
+// Stricter rate limiting for auth routes - Lenient for development
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 auth requests per windowMs
+  max: 50, // limit each IP to 50 auth requests per windowMs
   message: {
     error: 'Too many authentication attempts, please try again later.'
   }
@@ -77,10 +74,12 @@ const authLimiter = rateLimit({
 app.use('/api/', limiter)
 app.use('/api/auth/', authLimiter)
 
-// CORS configuration
+// CORS configuration - Allow all origins for development
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
-  credentials: true
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }))
 
 // Body parsing middleware
@@ -89,7 +88,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Security middleware
 app.use(mongoSanitize()) // Prevent NoSQL injection
-app.use(xss()) // Clean user input from malicious HTML
 
 // Compression middleware
 app.use(compression())
@@ -117,29 +115,10 @@ app.use('/api/users', userRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/cart', cartRoutes)
 app.use('/api/orders', orderRoutes)
-app.use('/api/admin', adminRoutes)
-app.use('/api/analytics', analyticsRoutes)
 
 // Socket.IO for real-time features
 io.on('connection', (socket) => {
   logger.info(`User connected: ${socket.id}`)
-  
-  // Join user to their personal room for notifications
-  socket.on('join-user-room', (userId) => {
-    socket.join(`user-${userId}`)
-    logger.info(`User ${userId} joined their room`)
-  })
-  
-  // Handle stress detection events
-  socket.on('stress-detected', (data) => {
-    // Broadcast to admin dashboard
-    socket.to('admin-room').emit('user-stress-detected', data)
-  })
-  
-  // Handle cart updates
-  socket.on('cart-updated', (data) => {
-    socket.to(`user-${data.userId}`).emit('cart-sync', data.cart)
-  })
   
   socket.on('disconnect', () => {
     logger.info(`User disconnected: ${socket.id}`)

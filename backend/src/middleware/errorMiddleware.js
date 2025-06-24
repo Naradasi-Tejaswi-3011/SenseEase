@@ -2,7 +2,7 @@ import { logger } from '../utils/logger.js'
 
 // Not found middleware
 export const notFound = (req, res, next) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`)
+  const error = new Error(`Not found - ${req.originalUrl}`)
   res.status(404)
   next(error)
 }

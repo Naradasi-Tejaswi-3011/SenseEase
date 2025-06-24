@@ -34,35 +34,6 @@ const addressSchema = new mongoose.Schema({
   }
 })
 
-const paymentMethodSchema = new mongoose.Schema({
-  type: {
-    type: String,
-    enum: ['credit', 'debit', 'paypal'],
-    required: true
-  },
-  last4: {
-    type: String,
-    required: true
-  },
-  brand: {
-    type: String,
-    required: true
-  },
-  expiryMonth: {
-    type: Number,
-    required: true
-  },
-  expiryYear: {
-    type: Number,
-    required: true
-  },
-  isDefault: {
-    type: Boolean,
-    default: false
-  },
-  stripePaymentMethodId: String
-})
-
 const accessibilityPreferencesSchema = new mongoose.Schema({
   // Visual preferences
   fontSize: {
@@ -198,7 +169,6 @@ const userSchema = new mongoose.Schema({
     default: ''
   },
   addresses: [addressSchema],
-  paymentMethods: [paymentMethodSchema],
   
   // Accessibility & Preferences
   accessibilityPreferences: {
@@ -224,19 +194,7 @@ const userSchema = new mongoose.Schema({
   loginCount: {
     type: Number,
     default: 0
-  },
-  stressPatterns: [{
-    type: {
-      type: String,
-      enum: ['rapid_navigation', 'long_pauses', 'failed_submissions', 'erratic_scrolling']
-    },
-    frequency: Number,
-    lastDetected: Date,
-    severity: {
-      type: String,
-      enum: ['low', 'medium', 'high']
-    }
-  }]
+  }
 }, {
   timestamps: true
 })
@@ -250,7 +208,7 @@ userSchema.index({ createdAt: -1 })
 // Pre-save middleware to hash password
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {
-    next()
+    return next()
   }
   
   const salt = await bcrypt.genSalt(12)
@@ -284,20 +242,6 @@ userSchema.methods.getEmailVerificationToken = function() {
   this.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000 // 24 hours
   
   return verificationToken
-}
-
-// Method to generate password reset token
-userSchema.methods.getResetPasswordToken = function() {
-  const resetToken = jwt.sign(
-    { id: this._id },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' }
-  )
-  
-  this.resetPasswordToken = resetToken
-  this.resetPasswordExpire = Date.now() + 60 * 60 * 1000 // 1 hour
-  
-  return resetToken
 }
 
 // Virtual for full name
