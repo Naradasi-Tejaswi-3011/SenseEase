@@ -10,7 +10,12 @@ const AuthPage = () => {
   const { login, register, loading, error, clearError, isAuthenticated } = useAuth()
   const { announceToScreenReader } = useAccessibility()
   
-  const [isLogin, setIsLogin] = useState(true)
+  const [isLogin, setIsLogin] = useState(() => {
+    // Check URL parameters to determine initial mode
+    const urlParams = new URLSearchParams(location.search)
+    const mode = urlParams.get('mode')
+    return mode !== 'signup' // Default to login unless explicitly signup
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
@@ -103,24 +108,42 @@ const AuthPage = () => {
       return
     }
     
+    clearError()
+
     try {
-      let result
       if (isLogin) {
-        result = await login(formData.email, formData.password)
+        const result = await login(formData.email, formData.password)
         if (result.success) {
-          announceToScreenReader('Login successful')
+          announceToScreenReader('Successfully signed in')
+
+          // Navigate to intended destination or home
           const from = location.state?.from?.pathname || '/'
-          navigate(from, { replace: true })
+
+          // Small delay to ensure auth state is updated
+          setTimeout(() => {
+            navigate(from, { replace: true })
+          }, 100)
+        } else {
+          // Error is already set in the auth context
+          announceToScreenReader(`Error: ${result.error || 'Login failed'}`)
         }
       } else {
-        result = await register(formData)
+        const result = await register(formData)
         if (result.success) {
-          announceToScreenReader('Registration successful')
-          navigate('/')
+          announceToScreenReader('Account created successfully')
+
+          // Navigate to onboarding for new users
+          setTimeout(() => {
+            navigate('/onboarding', { replace: true })
+          }, 100)
+        } else {
+          // Error is already set in the auth context
+          announceToScreenReader(`Error: ${result.error || 'Registration failed'}`)
         }
       }
     } catch (err) {
-      announceToScreenReader(`Error: ${err.message}`)
+      console.error('Auth error:', err)
+      announceToScreenReader(`Error: ${err.message || 'Authentication failed'}`)
     }
   }
 
@@ -380,11 +403,18 @@ const AuthPage = () => {
 
           {/* Demo Credentials */}
           {isLogin && (
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="text-sm font-medium text-blue-900 mb-2">Demo Credentials:</h4>
-              <p className="text-xs text-blue-800">
-                Email: demo@senseease.com<br />
-                Password: demo123
+            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
+              <h4 className="text-sm font-bold text-blue-900 mb-3">🎯 Demo Credentials for Testing:</h4>
+              <div className="bg-white rounded-lg p-3 border border-blue-200">
+                <p className="text-sm font-medium text-gray-900 mb-1">
+                  <span className="text-blue-600">Email:</span> demo@senseease.com
+                </p>
+                <p className="text-sm font-medium text-gray-900">
+                  <span className="text-blue-600">Password:</span> demo123
+                </p>
+              </div>
+              <p className="text-xs text-blue-700 mt-2 font-medium">
+                ✨ Try the complete shopping experience with accessibility features!
               </p>
             </div>
           )}

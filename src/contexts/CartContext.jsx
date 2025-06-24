@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react'
 import { useAuth } from './AuthContext'
+import apiService from '../services/api'
+import { useAnalytics } from '../hooks/useApi'
 
 const CartContext = createContext()
 
@@ -130,50 +132,227 @@ function cartReducer(state, action) {
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, initialState)
   const { user, isAuthenticated } = useAuth()
+  const analytics = useAnalytics()
 
-  // Load cart from localStorage on mount
+  // Load cart from API when user is authenticated
   useEffect(() => {
-    const savedCart = localStorage.getItem('senseease-cart')
-    if (savedCart) {
-      try {
-        const cartData = JSON.parse(savedCart)
-        dispatch({ type: actionTypes.LOAD_CART, payload: cartData })
-      } catch (error) {
-        console.error('Error loading cart:', error)
+    if (user) {
+      loadCart()
+    } else {
+      // Load from localStorage for guest users
+      const savedCart = localStorage.getItem('senseease-cart')
+      if (savedCart) {
+        try {
+          const cartData = JSON.parse(savedCart)
+          dispatch({ type: actionTypes.LOAD_CART, payload: cartData })
+        } catch (error) {
+          console.error('Error loading cart:', error)
+        }
       }
     }
-  }, [])
+  }, [user])
 
-  // Save cart to localStorage whenever it changes
+  // Save cart to localStorage for guest users only
   useEffect(() => {
-    localStorage.setItem('senseease-cart', JSON.stringify({
-      items: state.items,
-      total: state.total,
-      itemCount: state.itemCount
-    }))
-  }, [state.items, state.total, state.itemCount])
+    if (!user) {
+      localStorage.setItem('senseease-cart', JSON.stringify({
+        items: state.items,
+        total: state.total,
+        itemCount: state.itemCount
+      }))
+    }
+  }, [state.items, state.total, state.itemCount, user])
+
+  // Load cart from API
+  const loadCart = async () => {
+    if (!user) return
+
+    dispatch({ type: actionTypes.SET_LOADING, payload: true })
+
+    try {
+      const response = await apiService.getCart()
+      dispatch({ type: actionTypes.LOAD_CART, payload: {
+        items: response.data.items.map(item => ({
+          id: item.product.id,
+          name: item.product.name,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.product.primaryImage?.url,
+          brand: item.product.brand,
+          inStock: item.product.inStock,
+          selectedVariants: item.selectedVariants
+        })),
+        total: response.data.subtotal,
+        itemCount: response.data.itemCount
+      }})
+    } catch (error) {
+      dispatch({ type: actionTypes.SET_ERROR, payload: error.message })
+    } finally {
+      dispatch({ type: actionTypes.SET_LOADING, payload: false })
+    }
+  }
 
   // Add item to cart
-  const addItem = (product) => {
-    dispatch({ type: actionTypes.ADD_ITEM, payload: product })
-    
-    // Show success message (you can integrate with toast library)
-    console.log(`Added ${product.name} to cart`)
+  const addItem = async (product, quantity = 1, selectedVariants = []) => {
+    if (user) {
+      // Use API for authenticated users
+      dispatch({ type: actionTypes.SET_LOADING, payload: true })
+
+      try {
+        const response = await apiService.addToCart(product.id, quantity, selectedVariants)
+
+        // Update local state with API response
+        dispatch({ type: actionTypes.LOAD_CART, payload: {
+          items: response.data.items.map(item => ({
+            id: item.product.id,
+            name: item.product.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.product.primaryImage?.url,
+            brand: item.product.brand,
+            inStock: item.product.inStock,
+            selectedVariants: item.selectedVariants
+          })),
+          total: response.data.subtotal,
+          itemCount: response.data.itemCount
+        }})
+
+        // Track cart event
+        analytics.trackEvent('cart_event', {
+          action: 'add',
+          productId: product.id,
+          quantity
+        })
+
+        console.log(`Added ${product.name} to cart`)
+      } catch (error) {
+        dispatch({ type: actionTypes.SET_ERROR, payload: error.message })
+        console.error('Error adding item to cart:', error)
+        throw error
+      } finally {
+        dispatch({ type: actionTypes.SET_LOADING, payload: false })
+      }
+    } else {
+      // Use local state for guest users
+      try {
+        dispatch({ type: actionTypes.ADD_ITEM, payload: { ...product, quantity } })
+        console.log(`Added ${product.name} to cart`)
+      } catch (error) {
+        console.error('Error adding item to cart:', error)
+        throw error
+      }
+    }
   }
 
   // Remove item from cart
-  const removeItem = (productId) => {
-    dispatch({ type: actionTypes.REMOVE_ITEM, payload: productId })
+  const removeItem = async (productId) => {
+    if (user) {
+      // Use API for authenticated users
+      dispatch({ type: actionTypes.SET_LOADING, payload: true })
+
+      try {
+        // Find the cart item ID
+        const cartItem = state.items.find(item => item.id === productId)
+        if (!cartItem) return
+
+        const response = await apiService.removeFromCart(cartItem.cartItemId || productId)
+
+        // Update local state
+        dispatch({ type: actionTypes.LOAD_CART, payload: {
+          items: response.data.items.map(item => ({
+            id: item.product.id,
+            name: item.product.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.product.primaryImage?.url,
+            brand: item.product.brand,
+            inStock: item.product.inStock,
+            selectedVariants: item.selectedVariants,
+            cartItemId: item._id
+          })),
+          total: response.data.subtotal,
+          itemCount: response.data.itemCount
+        }})
+
+        // Track cart event
+        analytics.trackEvent('cart_event', {
+          action: 'remove',
+          productId
+        })
+      } catch (error) {
+        dispatch({ type: actionTypes.SET_ERROR, payload: error.message })
+        throw error
+      } finally {
+        dispatch({ type: actionTypes.SET_LOADING, payload: false })
+      }
+    } else {
+      // Use local state for guest users
+      dispatch({ type: actionTypes.REMOVE_ITEM, payload: productId })
+    }
   }
 
   // Update item quantity
-  const updateQuantity = (productId, quantity) => {
-    dispatch({ type: actionTypes.UPDATE_QUANTITY, payload: { id: productId, quantity } })
+  const updateQuantity = async (productId, quantity) => {
+    if (user) {
+      // Use API for authenticated users
+      dispatch({ type: actionTypes.SET_LOADING, payload: true })
+
+      try {
+        // Find the cart item ID
+        const cartItem = state.items.find(item => item.id === productId)
+        if (!cartItem) return
+
+        const response = await apiService.updateCartItem(cartItem.cartItemId || productId, quantity)
+
+        // Update local state
+        dispatch({ type: actionTypes.LOAD_CART, payload: {
+          items: response.data.items.map(item => ({
+            id: item.product.id,
+            name: item.product.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.product.primaryImage?.url,
+            brand: item.product.brand,
+            inStock: item.product.inStock,
+            selectedVariants: item.selectedVariants,
+            cartItemId: item._id
+          })),
+          total: response.data.subtotal,
+          itemCount: response.data.itemCount
+        }})
+
+        // Track cart event
+        analytics.trackEvent('cart_event', {
+          action: 'update',
+          productId,
+          quantity
+        })
+      } catch (error) {
+        dispatch({ type: actionTypes.SET_ERROR, payload: error.message })
+        throw error
+      } finally {
+        dispatch({ type: actionTypes.SET_LOADING, payload: false })
+      }
+    } else {
+      // Use local state for guest users
+      dispatch({ type: actionTypes.UPDATE_QUANTITY, payload: { id: productId, quantity } })
+    }
   }
 
   // Clear entire cart
-  const clearCart = () => {
-    dispatch({ type: actionTypes.CLEAR_CART })
+  const clearCart = async () => {
+    if (user) {
+      try {
+        await apiService.clearCart()
+        dispatch({ type: actionTypes.CLEAR_CART })
+        analytics.trackEvent('cart_event', { action: 'clear' })
+      } catch (error) {
+        dispatch({ type: actionTypes.SET_ERROR, payload: error.message })
+        throw error
+      }
+    } else {
+      dispatch({ type: actionTypes.CLEAR_CART })
+    }
   }
 
   // Toggle cart visibility

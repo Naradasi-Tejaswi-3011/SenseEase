@@ -1,23 +1,28 @@
 import React, { useState } from 'react'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import { useUserProfile } from '../contexts/UserProfileContext'
-import { 
-  Settings, 
-  Eye, 
-  Type, 
-  Palette, 
-  Volume2, 
-  Focus, 
+import { useAnalytics } from '../hooks/useApi'
+import {
+  Settings,
+  Eye,
+  Type,
+  Palette,
+  Volume2,
+  Focus,
   ChevronRight,
   ChevronLeft,
-  X
+  X,
+  Brain,
+  Heart,
+  Zap,
+  Shield
 } from 'lucide-react'
 
 const AccessibilityToolbar = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [activePanel, setActivePanel] = useState(null)
   
-  const { 
+  const {
     preferences,
     toggleHighContrast,
     toggleLowSaturation,
@@ -26,10 +31,15 @@ const AccessibilityToolbar = () => {
     toggleFocusMode,
     setTextSize,
     setColorblindMode,
+    toggleHideCarousels,
+    toggleHidePopups,
+    toggleHideTimers,
+    toggleSimplifiedNavigation,
     announceToScreenReader
   } = useAccessibility()
 
   const { addAdaptationUsed } = useUserProfile()
+  const { trackEvent } = useAnalytics()
 
   const toggleToolbar = () => {
     setIsOpen(!isOpen)
@@ -45,6 +55,13 @@ const AccessibilityToolbar = () => {
     toggleFunction()
     addAdaptationUsed(adaptationName)
     announceToScreenReader(description)
+
+    // Track accessibility usage
+    trackEvent('accessibility_usage', {
+      feature: adaptationName,
+      enabled: !preferences[adaptationName.replace('-', '').toLowerCase()],
+      timestamp: Date.now()
+    })
   }
 
   const panels = {
@@ -139,6 +156,88 @@ const AccessibilityToolbar = () => {
           active: preferences.focusMode,
           toggle: () => handleToggle(toggleFocusMode, 'focus-mode',
             preferences.focusMode ? 'Focus mode disabled' : 'Focus mode enabled')
+        }
+      ]
+    },
+    adhd: {
+      title: 'ADHD Support',
+      icon: Zap,
+      options: [
+        {
+          id: 'hideCarousels',
+          label: 'Hide Moving Elements',
+          description: 'Remove carousels and auto-playing content',
+          active: preferences.hideCarousels,
+          toggle: () => handleToggle(toggleHideCarousels, 'hide-carousels',
+            preferences.hideCarousels ? 'Moving elements shown' : 'Moving elements hidden')
+        },
+        {
+          id: 'hideTimers',
+          label: 'Hide Countdown Timers',
+          description: 'Remove time pressure elements',
+          active: preferences.hideTimers,
+          toggle: () => handleToggle(toggleHideTimers, 'hide-timers',
+            preferences.hideTimers ? 'Timers shown' : 'Timers hidden')
+        },
+        {
+          id: 'focusMode',
+          label: 'Focus Mode',
+          description: 'Minimize distractions and simplify interface',
+          active: preferences.focusMode,
+          toggle: () => handleToggle(toggleFocusMode, 'focus-mode',
+            preferences.focusMode ? 'Focus mode disabled' : 'Focus mode enabled')
+        }
+      ]
+    },
+    autism: {
+      title: 'Autism Support',
+      icon: Heart,
+      options: [
+        {
+          id: 'simplifiedNavigation',
+          label: 'Simplified Navigation',
+          description: 'Reduce menu complexity and options',
+          active: preferences.simplifiedNavigation,
+          toggle: () => handleToggle(toggleSimplifiedNavigation, 'simplified-nav',
+            preferences.simplifiedNavigation ? 'Full navigation restored' : 'Navigation simplified')
+        },
+        {
+          id: 'hidePopups',
+          label: 'Block Unexpected Popups',
+          description: 'Prevent sudden interface changes',
+          active: preferences.hidePopups,
+          toggle: () => handleToggle(toggleHidePopups, 'hide-popups',
+            preferences.hidePopups ? 'Popups enabled' : 'Popups blocked')
+        },
+        {
+          id: 'reducedMotion',
+          label: 'Reduce Motion',
+          description: 'Minimize animations and transitions',
+          active: preferences.reducedMotion,
+          toggle: () => handleToggle(toggleReducedMotion, 'reduced-motion',
+            preferences.reducedMotion ? 'Motion restored' : 'Motion reduced')
+        }
+      ]
+    },
+    sensory: {
+      title: 'Sensory Support',
+      icon: Shield,
+      options: [
+        {
+          id: 'lowSaturation',
+          label: 'Reduce Color Intensity',
+          description: 'Lower saturation for sensory comfort',
+          active: preferences.lowSaturation,
+          toggle: () => handleToggle(toggleLowSaturation, 'low-saturation',
+            preferences.lowSaturation ? 'Full colors restored' : 'Colors reduced')
+        },
+        {
+          id: 'highContrast',
+          label: 'High Contrast',
+          description: 'Increase contrast for better definition',
+          active: preferences.highContrast,
+          toggle: () => handleToggle(toggleHighContrast, 'high-contrast',
+            preferences.highContrast ? 'Normal contrast restored' : 'High contrast enabled')
         }
       ]
     }

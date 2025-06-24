@@ -19,14 +19,21 @@ const Header = () => {
     e.preventDefault()
     if (searchQuery.trim()) {
       trackInteraction('search', { query: searchQuery })
-      // Navigate to search results (to be implemented)
-      console.log('Searching for:', searchQuery)
+      navigate(`/search?q=${encodeURIComponent(searchQuery)}`)
+      setSearchQuery('')
+      setIsMobileMenuOpen(false)
     }
   }
 
   const handleNavClick = (path, label) => {
     trackInteraction('navigation', { from: window.location.pathname, to: path, label })
-    navigate(path)
+
+    // Check if route requires authentication
+    if ((path === '/checkout' || path === '/profile') && !isAuthenticated) {
+      navigate('/auth', { state: { from: { pathname: path } } })
+    } else {
+      navigate(path)
+    }
     setIsMobileMenuOpen(false)
   }
 
@@ -40,7 +47,7 @@ const Header = () => {
         { path: '/', label: 'Home' },
         { path: '/grocery', label: 'Grocery' },
         { path: '/electronics', label: 'Electronics' },
-        { path: '/home', label: 'Home' },
+        { path: '/home', label: 'Home & Garden' },
         { path: '/clothing', label: 'Clothing' },
         { path: '/cart', label: 'Cart' },
         ...(isAuthenticated ? [{ path: '/profile', label: 'Account' }] : [])
@@ -138,13 +145,21 @@ const Header = () => {
                 <User className="w-6 h-6" />
               </button>
             ) : (
-              <button
-                onClick={() => handleNavClick('/auth', 'Login')}
-                className="hidden sm:flex items-center space-x-2 px-4 py-2 text-blue-600 hover:text-blue-700 transition-colors hover:bg-blue-50 rounded-lg font-medium"
-              >
-                <LogIn className="w-5 h-5" />
-                <span>Sign In</span>
-              </button>
+              <div className="hidden sm:flex items-center space-x-2">
+                <button
+                  onClick={() => navigate('/auth?mode=signup')}
+                  className="px-3 py-2 text-gray-600 hover:text-blue-600 transition-colors hover:bg-blue-50 rounded-lg font-medium"
+                >
+                  Sign Up
+                </button>
+                <button
+                  onClick={() => navigate('/auth')}
+                  className="flex items-center space-x-2 px-4 py-2 text-blue-600 hover:text-blue-700 transition-colors hover:bg-blue-50 rounded-lg font-medium"
+                >
+                  <LogIn className="w-5 h-5" />
+                  <span>Sign In</span>
+                </button>
+              </div>
             )}
 
             {/* Mobile Menu Toggle */}
@@ -195,6 +210,30 @@ const Header = () => {
                 {label}
               </button>
             ))}
+
+            {/* Auth options for mobile */}
+            {!isAuthenticated && (
+              <div className="border-t border-gray-200 pt-2 mt-2">
+                <button
+                  onClick={() => {
+                    navigate('/auth?mode=signup')
+                    setIsMobileMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg transition-colors"
+                >
+                  Sign Up
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/auth')
+                    setIsMobileMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+                >
+                  Sign In
+                </button>
+              </div>
+            )}
           </nav>
         </div>
       )}

@@ -44,27 +44,48 @@
   .btn-primary {
     background-color: #0071ce;
     color: white;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 4px rgba(0, 113, 206, 0.15);
+    border: 2px solid transparent;
   }
 
   .btn-primary:hover {
     background-color: #005bb5;
+    box-shadow: 0 4px 8px rgba(0, 113, 206, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:focus {
+    outline: none;
+    ring: 4px;
+    ring-color: rgba(59, 130, 246, 0.3);
+    border-color: #3b82f6;
   }
 
   .btn-secondary {
-    background-color: #f3f4f6;
+    background-color: #f9fafb;
     color: #374151;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease-in-out;
+    border: 2px solid #d1d5db;
   }
 
   .btn-secondary:hover {
-    background-color: #e5e7eb;
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary:focus {
+    outline: none;
+    ring: 4px;
+    ring-color: rgba(156, 163, 175, 0.3);
+    border-color: #6b7280;
   }
 
   .card {
@@ -148,56 +169,54 @@
     clip: auto;
     white-space: normal;
   }
-}
 
-/* Utility classes for accessibility themes */
-@layer utilities {
-  .theme-high-contrast {
-    @apply bg-black text-white;
+  /* Page transitions */
+  .page-transition {
+    animation: fadeIn 0.3s ease-in-out;
   }
 
-  .theme-high-contrast .card {
-    @apply bg-gray-900 border-gray-700 text-white;
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  .theme-low-saturation {
-    @apply text-low-sat-800;
+  /* Image loading improvements */
+  .product-image {
+    background-color: #f3f4f6;
+    transition: opacity 0.3s ease-in-out;
   }
 
-  .theme-low-saturation .card {
-    @apply bg-low-sat-50 border-low-sat-200;
+  .product-image:not([src]), .product-image[src=""] {
+    opacity: 0.5;
   }
 
-  .font-dyslexic {
-    font-family: 'OpenDyslexic', Arial, sans-serif !important;
+  /* Smooth hover effects */
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
   }
 
-  .text-size-small {
-    @apply text-sm;
+  /* Loading states */
+  .loading-shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
   }
 
-  .text-size-medium {
-    @apply text-base;
-  }
-
-  .text-size-large {
-    @apply text-lg-plus;
-  }
-
-  .text-size-extra-large {
-    @apply text-xl-plus;
-  }
-
-  .reduced-motion * {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  .focus-mode {
-    @apply bg-gray-50;
-  }
-
-  .focus-mode .card {
-    @apply shadow-none border-2 border-gray-300;
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
   }
 }
+
+

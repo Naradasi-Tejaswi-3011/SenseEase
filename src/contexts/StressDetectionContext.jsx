@@ -116,7 +116,12 @@ function stressDetectionReducer(state, action) {
 export function StressDetectionProvider({ children }) {
   const [state, dispatch] = useReducer(stressDetectionReducer, initialState)
   const { preferences, addAdaptationUsed } = useUserProfile()
-  const { toggleFocusMode, announceToScreenReader } = useAccessibility()
+  const {
+    toggleFocusMode,
+    toggleReducedMotion,
+    toggleSimplifiedNavigation,
+    announceToScreenReader
+  } = useAccessibility()
 
   // Track page navigation
   const trackPageView = useCallback((path) => {
@@ -302,8 +307,9 @@ export function StressDetectionProvider({ children }) {
           title: 'Reduce Motion',
           description: 'Turn off animations and moving elements',
           action: () => {
-            // This would be handled by the accessibility context
+            toggleReducedMotion()
             addAdaptationUsed('stress-triggered-reduced-motion')
+            announceToScreenReader('Reduced motion activated to minimize distractions')
           }
         })
       }
@@ -329,7 +335,9 @@ export function StressDetectionProvider({ children }) {
           title: 'Simplify Navigation',
           description: 'Show only essential menu items',
           action: () => {
+            toggleSimplifiedNavigation()
             addAdaptationUsed('stress-triggered-simplified-nav')
+            announceToScreenReader('Navigation simplified to reduce complexity')
           }
         })
       }
@@ -342,11 +350,15 @@ export function StressDetectionProvider({ children }) {
       })
       dispatch({ type: actionTypes.SHOW_SUGGESTION_MODAL })
     }
-  }, [preferences, toggleFocusMode, addAdaptationUsed, announceToScreenReader])
+  }, [preferences, toggleFocusMode, toggleReducedMotion, toggleSimplifiedNavigation, addAdaptationUsed, announceToScreenReader])
 
-  // Recalculate stress level when patterns change
+  // Recalculate stress level when patterns change (throttled)
   useEffect(() => {
-    calculateStressLevel()
+    const timer = setTimeout(() => {
+      calculateStressLevel()
+    }, 100) // Throttle to prevent excessive calculations
+
+    return () => clearTimeout(timer)
   }, [state.detectedPatterns, calculateStressLevel])
 
   // Action creators
@@ -358,15 +370,62 @@ export function StressDetectionProvider({ children }) {
     dispatch({ type: actionTypes.RESET_SESSION })
   }
 
+  // Manual trigger for testing
+  const triggerStressSuggestions = () => {
+    const testSuggestions = [
+      {
+        id: 'focus_mode',
+        title: 'Switch to Focus Mode',
+        description: 'Simplify the interface to reduce distractions',
+        action: () => {
+          toggleFocusMode()
+          addAdaptationUsed('manual-focus-mode')
+          announceToScreenReader('Focus mode activated')
+          hideSuggestionModal()
+        }
+      },
+      {
+        id: 'reduce_motion',
+        title: 'Reduce Motion',
+        description: 'Turn off animations and moving elements',
+        action: () => {
+          toggleReducedMotion()
+          addAdaptationUsed('manual-reduced-motion')
+          announceToScreenReader('Reduced motion activated')
+          hideSuggestionModal()
+        }
+      },
+      {
+        id: 'simplified_nav',
+        title: 'Simplify Navigation',
+        description: 'Show only essential menu items',
+        action: () => {
+          toggleSimplifiedNavigation()
+          addAdaptationUsed('manual-simplified-nav')
+          announceToScreenReader('Navigation simplified')
+          hideSuggestionModal()
+        }
+      }
+    ]
+
+    dispatch({ type: actionTypes.CLEAR_SUGGESTIONS })
+    testSuggestions.forEach(suggestion => {
+      dispatch({ type: actionTypes.ADD_SUGGESTION, payload: suggestion })
+    })
+    dispatch({ type: actionTypes.SHOW_SUGGESTION_MODAL })
+    dispatch({ type: actionTypes.UPDATE_STRESS_LEVEL, payload: 'high' })
+  }
+
   const value = {
     // State
     ...state,
-    
+
     // Actions
     trackPageView,
     trackInteraction,
     hideSuggestionModal,
     resetSession,
+    triggerStressSuggestions,
   }
 
   return (

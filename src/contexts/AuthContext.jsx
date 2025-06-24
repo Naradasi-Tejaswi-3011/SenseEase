@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react'
+import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react'
+import apiService from '../services/api'
 
 const AuthContext = createContext()
 
@@ -109,31 +110,44 @@ function authReducer(state, action) {
 // Provider component
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState)
+  const stateRef = useRef(state)
+  const [usersLoaded, setUsersLoaded] = useState(false)
 
-  // Load users and auth state from localStorage on mount
+  // Keep ref updated
   useEffect(() => {
-    const savedUsers = localStorage.getItem('senseease-users')
-    const savedAuth = localStorage.getItem('senseease-auth')
-    
-    if (savedUsers) {
-      try {
-        const users = JSON.parse(savedUsers)
-        dispatch({ type: actionTypes.LOAD_USERS, payload: users })
-      } catch (error) {
-        console.error('Error loading users:', error)
-      }
-    }
-    
-    if (savedAuth) {
-      try {
-        const authData = JSON.parse(savedAuth)
-        if (authData.user && authData.isAuthenticated) {
-          dispatch({ type: actionTypes.LOGIN_SUCCESS, payload: authData.user })
+    stateRef.current = state
+  }, [state])
+
+  // Load auth state from localStorage and validate with API on mount
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const savedToken = localStorage.getItem('senseease-token')
+
+      if (savedToken) {
+        try {
+          // Set token in API service
+          apiService.setToken(savedToken)
+
+          // Validate token and get user data
+          const response = await apiService.getMe()
+          if (response.success) {
+            dispatch({ type: actionTypes.LOGIN_SUCCESS, payload: response.data })
+          } else {
+            // Token is invalid, clear it
+            localStorage.removeItem('senseease-token')
+            apiService.setToken(null)
+          }
+        } catch (error) {
+          console.error('Error validating auth token:', error)
+          localStorage.removeItem('senseease-token')
+          apiService.setToken(null)
         }
-      } catch (error) {
-        console.error('Error loading auth state:', error)
       }
+
+      setUsersLoaded(true)
     }
+
+    initializeAuth()
   }, [])
 
   // Save auth state to localStorage
@@ -148,12 +162,7 @@ export function AuthProvider({ children }) {
     }
   }, [state.isAuthenticated, state.user])
 
-  // Save users to localStorage
-  useEffect(() => {
-    if (state.users.length > 0) {
-      localStorage.setItem('senseease-users', JSON.stringify(state.users))
-    }
-  }, [state.users])
+
 
   // Simulate API delay
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
@@ -161,18 +170,15 @@ export function AuthProvider({ children }) {
   // Login function
   const login = async (email, password) => {
     dispatch({ type: actionTypes.LOGIN_START })
-    
+
     try {
-      await delay(1000) // Simulate API call
-      
-      const user = state.users.find(u => u.email === email && u.password === password)
-      
-      if (user) {
-        const { password: _, ...userWithoutPassword } = user
-        dispatch({ type: actionTypes.LOGIN_SUCCESS, payload: userWithoutPassword })
+      const response = await apiService.login({ email, password })
+
+      if (response.success) {
+        dispatch({ type: actionTypes.LOGIN_SUCCESS, payload: response.user })
         return { success: true }
       } else {
-        throw new Error('Invalid email or password')
+        throw new Error(response.error || 'Login failed')
       }
     } catch (error) {
       dispatch({ type: actionTypes.LOGIN_FAILURE, payload: error.message })
@@ -183,37 +189,16 @@ export function AuthProvider({ children }) {
   // Register function
   const register = async (userData) => {
     dispatch({ type: actionTypes.REGISTER_START })
-    
+
     try {
-      await delay(1000) // Simulate API call
-      
-      // Check if user already exists
-      const existingUser = state.users.find(u => u.email === userData.email)
-      if (existingUser) {
-        throw new Error('User with this email already exists')
+      const response = await apiService.register(userData)
+
+      if (response.success) {
+        dispatch({ type: actionTypes.REGISTER_SUCCESS, payload: response.user })
+        return { success: true }
+      } else {
+        throw new Error(response.error || 'Registration failed')
       }
-      
-      // Create new user
-      const newUser = {
-        id: Date.now().toString(),
-        ...userData,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        orderHistory: [],
-        wishlist: [],
-        addresses: [],
-        paymentMethods: []
-      }
-      
-      // Add to users array
-      const updatedUsers = [...state.users, newUser]
-      dispatch({ type: actionTypes.LOAD_USERS, payload: updatedUsers })
-      
-      // Auto login after registration
-      const { password: _, ...userWithoutPassword } = newUser
-      dispatch({ type: actionTypes.REGISTER_SUCCESS, payload: userWithoutPassword })
-      
-      return { success: true }
     } catch (error) {
       dispatch({ type: actionTypes.REGISTER_FAILURE, payload: error.message })
       return { success: false, error: error.message }
@@ -221,15 +206,19 @@ export function AuthProvider({ children }) {
   }
 
   // Logout function
-  const logout = () => {
-    dispatch({ type: actionTypes.LOGOUT })
-    localStorage.removeItem('senseease-auth')
+  const logout = async () => {
+    try {
+      await apiService.logout()
+    } finally {
+      dispatch({ type: actionTypes.LOGOUT })
+      localStorage.removeItem('senseease-auth')
+    }
   }
 
   // Update user function
   const updateUser = async (updatedData) => {
     try {
-      const updatedUser = { ...state.user, ...updatedData }
+      const updatedUser = { ...stateRef.current.user, ...updatedData }
       dispatch({ type: actionTypes.UPDATE_USER, payload: updatedUser })
       return { success: true }
     } catch (error) {
@@ -245,7 +234,8 @@ export function AuthProvider({ children }) {
   const value = {
     // State
     ...state,
-    
+    usersLoaded,
+
     // Actions
     login,
     register,

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useCart } from '../contexts/CartContext'
+import { useProducts } from '../contexts/ProductContext'
 import { useStressDetection } from '../contexts/StressDetectionContext'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import { getProductById } from '../data/products'
+import { useAnalytics } from '../hooks/useApi'
+import stressDetection from '../utils/stressDetection'
 import {
   Star,
   ShoppingCart,
@@ -23,10 +26,11 @@ const ProductPage = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const { addItem, getItemQuantity, updateQuantity } = useCart()
+  const { loadProduct, currentProduct, loading, recommendations, loadRecommendations } = useProducts()
   const { trackInteraction } = useStressDetection()
   const { announceToScreenReader } = useAccessibility()
+  const analytics = useAnalytics()
 
-  const [product, setProduct] = useState(null)
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
   const [isWishlisted, setIsWishlisted] = useState(false)
@@ -34,19 +38,30 @@ const ProductPage = () => {
   const [showAddedToCart, setShowAddedToCart] = useState(false)
 
   useEffect(() => {
-    const foundProduct = getProductById(id)
-    if (foundProduct) {
-      setProduct(foundProduct)
-      trackInteraction('product_page_view', {
-        productId: foundProduct.id,
-        productName: foundProduct.name
+    if (id) {
+      loadProduct(id).catch(() => {
+        navigate('/404')
       })
-    } else {
-      navigate('/404')
     }
-  }, [id, navigate, trackInteraction])
+  }, [id, loadProduct, navigate])
 
-  if (!product) {
+  useEffect(() => {
+    if (currentProduct) {
+      // Load recommendations
+      loadRecommendations(currentProduct.id)
+
+      // Track product view
+      trackInteraction('product_page_view', {
+        productId: currentProduct.id,
+        productName: currentProduct.name
+      })
+
+      // Report to stress detection system
+      stressDetection.reportSearchFrustration('', 1) // Found product
+    }
+  }, [currentProduct, loadRecommendations, trackInteraction])
+
+  if (loading || !currentProduct) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -57,18 +72,25 @@ const ProductPage = () => {
     )
   }
 
-  const handleAddToCart = () => {
-    for (let i = 0; i < quantity; i++) {
-      addItem(product)
+  const product = currentProduct
+
+  const handleAddToCart = async () => {
+    try {
+      await addItem(product, quantity)
+      setShowAddedToCart(true)
+      setTimeout(() => setShowAddedToCart(false), 3000)
+
+      trackInteraction('add_to_cart', {
+        productId: product.id,
+        productName: product.name,
+        quantity
+      })
+
+      announceToScreenReader(`Added ${quantity} ${product.name} to cart`)
+    } catch (error) {
+      console.error('Failed to add to cart:', error)
+      announceToScreenReader('Failed to add item to cart. Please try again.')
     }
-    setShowAddedToCart(true)
-    setTimeout(() => setShowAddedToCart(false), 3000)
-    trackInteraction('add_to_cart', {
-      productId: product.id,
-      productName: product.name,
-      quantity
-    })
-    announceToScreenReader(`Added ${quantity} ${product.name} to cart`)
   }
 
   const handleWishlist = () => {
@@ -101,44 +123,13 @@ const ProductPage = () => {
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0
 
-  // Mock additional images
-  const productImages = [
-    product.image,
-    product.image, // In real app, these would be different angles
-    product.image,
-    product.image
-  ]
+  // Product images from API
+  const productImages = product.images?.length > 0
+    ? product.images.map(img => img.url)
+    : [product.primaryImage?.url || product.image || '/placeholder-product.jpg']
 
-  // Mock reviews
-  const reviews = [
-    {
-      id: 1,
-      author: "Sarah M.",
-      rating: 5,
-      date: "2024-01-15",
-      title: "Excellent product!",
-      content: "This product exceeded my expectations. Great quality and fast shipping.",
-      verified: true
-    },
-    {
-      id: 2,
-      author: "Mike R.",
-      rating: 4,
-      date: "2024-01-10",
-      title: "Good value",
-      content: "Solid product for the price. Would recommend to others.",
-      verified: true
-    },
-    {
-      id: 3,
-      author: "Lisa K.",
-      rating: 5,
-      date: "2024-01-05",
-      title: "Love it!",
-      content: "Perfect for my needs. The accessibility features mentioned are spot on.",
-      verified: true
-    }
-  ]
+  // Product reviews from API
+  const reviews = product.reviews || []
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
