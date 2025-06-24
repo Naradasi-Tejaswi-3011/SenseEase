@@ -1,21 +1,23 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Star, ShoppingCart } from 'lucide-react'
+import { useCart } from '../contexts/CartContext'
 import { useStressDetection } from '../contexts/StressDetectionContext'
 
 const ProductCard = ({ product, showDiscount = false }) => {
+  const navigate = useNavigate()
+  const { addItem } = useCart()
   const { trackInteraction } = useStressDetection()
 
   const handleAddToCart = (e) => {
     e.stopPropagation()
+    addItem(product)
     trackInteraction('add_to_cart', { productId: product.id, productName: product.name })
-    // Add to cart logic would go here
-    console.log('Added to cart:', product.name)
   }
 
   const handleProductClick = () => {
     trackInteraction('product_view', { productId: product.id, productName: product.name })
-    // Navigate to product page
-    console.log('View product:', product.name)
+    navigate(`/product/${product.id}`)
   }
 
   const discount = showDiscount && product.originalPrice > product.price

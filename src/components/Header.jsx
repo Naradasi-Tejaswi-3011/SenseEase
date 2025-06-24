@@ -1,11 +1,15 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { useCart } from '../contexts/CartContext'
 import { useUserProfile } from '../contexts/UserProfileContext'
 import { useStressDetection } from '../contexts/StressDetectionContext'
-import { Search, ShoppingCart, User, Menu, X } from 'lucide-react'
+import { Search, ShoppingCart, User, Menu, X, LogIn } from 'lucide-react'
 
 const Header = () => {
   const navigate = useNavigate()
+  const { isAuthenticated, user } = useAuth()
+  const { itemCount } = useCart()
   const { preferences } = useUserProfile()
   const { trackInteraction } = useStressDetection()
   const [searchQuery, setSearchQuery] = useState('')
@@ -26,11 +30,11 @@ const Header = () => {
     setIsMobileMenuOpen(false)
   }
 
-  const mainNavItems = preferences.simplifiedNavigation 
+  const mainNavItems = preferences.simplifiedNavigation
     ? [
         { path: '/', label: 'Home' },
         { path: '/cart', label: 'Cart' },
-        { path: '/profile', label: 'Account' }
+        ...(isAuthenticated ? [{ path: '/profile', label: 'Account' }] : [])
       ]
     : [
         { path: '/', label: 'Home' },
@@ -39,7 +43,7 @@ const Header = () => {
         { path: '/home', label: 'Home' },
         { path: '/clothing', label: 'Clothing' },
         { path: '/cart', label: 'Cart' },
-        { path: '/profile', label: 'Account' }
+        ...(isAuthenticated ? [{ path: '/profile', label: 'Account' }] : [])
       ]
 
   return (
@@ -116,19 +120,32 @@ const Header = () => {
               aria-label="Shopping cart"
             >
               <ShoppingCart className="w-6 h-6" />
-              <span className="absolute -top-1 -right-1 bg-yellow-400 text-blue-900 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                0
-              </span>
+              {itemCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-yellow-400 text-blue-900 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {itemCount}
+                </span>
+              )}
             </button>
 
-            {/* Account */}
-            <button
-              onClick={() => handleNavClick('/profile', 'Account')}
-              className="hidden sm:flex p-3 text-gray-600 hover:text-blue-600 transition-colors hover:bg-blue-50 rounded-lg"
-              aria-label="Account"
-            >
-              <User className="w-6 h-6" />
-            </button>
+            {/* Account / Login */}
+            {isAuthenticated ? (
+              <button
+                onClick={() => handleNavClick('/profile', 'Account')}
+                className="hidden sm:flex p-3 text-gray-600 hover:text-blue-600 transition-colors hover:bg-blue-50 rounded-lg"
+                aria-label="Account"
+                title={`${user?.firstName} ${user?.lastName}`}
+              >
+                <User className="w-6 h-6" />
+              </button>
+            ) : (
+              <button
+                onClick={() => handleNavClick('/auth', 'Login')}
+                className="hidden sm:flex items-center space-x-2 px-4 py-2 text-blue-600 hover:text-blue-700 transition-colors hover:bg-blue-50 rounded-lg font-medium"
+              >
+                <LogIn className="w-5 h-5" />
+                <span>Sign In</span>
+              </button>
+            )}
 
             {/* Mobile Menu Toggle */}
             <button
